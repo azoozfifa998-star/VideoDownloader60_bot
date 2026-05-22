@@ -49,67 +49,67 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "مرحباً! أرسل لي رابط فيديو من:\n"
             "يوتيوب، تيك توك، تويتر/X، انستقرام\n"
-            "وراح أحمله لك مباشرة"
+            "وراح أرسلك رابط تحميل مباشر بجودة عالية"
         )
     else:
         await send_subscribe_message(update.message)
 
-async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_download_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     is_subscribed = await check_subscription(user_id, context)
-    
+
     if not is_subscribed:
         await send_subscribe_message(update.message)
         return
-    
+
     url = update.message.text
-    
+
     if not any(x in url for x in ['youtube.com', 'youtu.be', 'tiktok.com', 'twitter.com', 'x.com', 'instagram.com']):
         await update.message.reply_text("أرسل رابط صحيح من يوتيوب، تيك توك، تويتر، أو انستقرام")
         return
-    
-    msg = await update.message.reply_text("جاري التحميل...")
-    
+
+    msg = await update.message.reply_text("جاري جلب رابط التحميل...")
+
     ydl_opts = {
-    'format': 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]/best',
-    'outtmpl': '/tmp/%(id)s.%(ext)s',
-    'quiet': True,
-    'no_warnings': True,
-    'merge_output_format': 'mp4',
-    'postprocessor_args': [
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        '-crf', '23',
-    ],
-}
+        'format': 'best[ext=mp4]/best',
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+    }
 
-
-    
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            file_path = ydl.prepare_filename(info)
+            info = ydl.extract_info(url, download=False)
+            title = info.get('title', 'فيديو')
+            direct_url = info.get('url', '')
+            duration = info.get('duration', 0)
             
-            if not file_path.endswith('.mp4'):
-                file_path = file_path.rsplit('.', 1)[0] + '.mp4'
-        
-        file_size = os.path.getsize(file_path)
-        
-        if file_size > 50 * 1024 * 1024:
-            await msg.edit_text("الفيديو كبير جداً حتى بعد الضغط، جرب فيديو أقصر")
-            os.remove(file_path)
+            if duration:
+                minutes = duration // 60
+                seconds = duration % 60
+                duration_text = f"{minutes}:{seconds:02d}"
+            else:
+                duration_text = "غير معروف"
+
+        if not direct_url:
+            await msg.edit_text("ما قدرت أجلب رابط التحميل، جرب رابط ثاني")
             return
-        
-        await msg.edit_text("جاري الإرسال...")
-        
-        with open(file_path, 'rb') as video:
-            await update.message.reply_video(video=video)
-        
-        await msg.delete()
-        os.remove(file_path)
-    
+
+        keyboard = [
+            [InlineKeyboardButton("تحميل الفيديو", url=direct_url)]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        await msg.edit_text(
+            f"✅ جاهز للتحميل\n\n"
+            f"العنوان: {title[:50]}\n"
+            f"المدة: {duration_text}\n\n"
+            f"اضغط الزر أدناه لتحميل الفيديو بجودة عالية",
+            reply_markup=reply_markup
+        )
+
     except Exception as e:
-        await msg.edit_text("حدث خطأ أثناء التحميل، تأكد من الرابط وحاول مرة ثانية")
+        await msg.edit_text("حدث خطأ، تأكد من الرابط وحاول مرة ثانية")
         print(f"خطأ: {e}")
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -122,7 +122,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 "مرحباً! أرسل لي رابط فيديو من:\n"
                 "يوتيوب، تيك توك، تويتر/X، انستقرام\n"
-                "وراح أحمله لك مباشرة"
+                "وراح أرسلك رابط تحميل مباشر بجودة عالية"
             )
         else:
             await query.answer("لم تشترك بعد! اشترك في القناة أولاً", show_alert=True)
@@ -133,7 +133,7 @@ def main():
     asyncio.set_event_loop(loop)
     app_bot = Application.builder().token(BOT_TOKEN).build()
     app_bot.add_handler(CommandHandler("start", start))
-    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, download_video))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_download_link))
     app_bot.add_handler(CallbackQueryHandler(button_handler))
     print("البوت شغال...")
     app_bot.run_polling()
