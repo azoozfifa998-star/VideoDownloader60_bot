@@ -71,11 +71,10 @@ async def download_video(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = await update.message.reply_text("جاري التحميل...")
     
     ydl_opts = {
-    'format': 'bestvideo[ext=mp4][height<=720]+bestaudio[ext=m4a]/best[ext=mp4][height<=720]/best[height<=720]/best',
+    'format': 'best[ext=mp4]/best',
     'outtmpl': '/tmp/%(id)s.%(ext)s',
     'quiet': True,
     'no_warnings': True,
-    'merge_output_format': 'mp4',
 }
 
     
